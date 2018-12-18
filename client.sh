@@ -26,11 +26,11 @@ elif [ $chekIp -eq 0 ];then
 	echo "please use this format:./client netType ip"
     exit
 else
-    which $netType
+    netTool=`which $netType`
 	if [ $? -eq 0 ];then
         echo "now system support $netType"
     else
-        yum install -y $netType || apt install -y $netType
+        yum install -y which $netType || apt install -y which $netType
     fi
 fi
 
@@ -43,45 +43,76 @@ function iperf(){
 	interrupt=3
 	for port in ${ports[*]}
 	do
-		ps -ef | grep iperf | grep -v "grep --color=auto" | grep -q $port
+		ps -ef | grep -v "grep --color=auto" | grep -q "$netType -s"
 		if [ $? -eq 0 ];then
-			continue
+			ps -ef | grep -v "$netType -s" | grep "$netType -c"| grep -q $port
+			if [ $? -eq 0 ];then
+				continue
+			else
+				#for ((i=1;i<=$count;i++))
+				#do
+					#echo "${i}count" >> ${port}_log
+					echo "${port} test........"
+					for parallel in ${parallels[*]}
+					do
+						$netTool -c $serverPort -P $parallel -i $interrupt -t $time -p $port | tee ${port} 
+						needRows=`cat ${port} | tail -n 4 | head -n 2`
+						echo "now this port is ${port} and the parallel is ${parallel}------" >> ${port}_log
+						echo "${needRows}" >> ${port}_log
+						rm -f ${port}
+					done
+					#echo >> ${port}_log
+				#done
+				exit
+			fi
+		
 		else
-			#for ((i=1;i<=$count;i++))
-			#do
-				#echo "${i}count" >> ${port}_log
-				echo "${port} test........"
-				for parallel in ${parallels[*]}
-				do
-					/usr/bin/iperf -c $serverPort -P $parallel -i $interrupt -t $time -p $port | tee ${port} 
-					needRows=`cat ${port} | tail -n 4 | head -n 2`
-					echo "now this port is ${port} and the parallel is ${parallel}------" >> ${port}_log
-					echo "${needRows}" >> ${port}_log
-					rm -f ${port}
-				done
-				#echo >> ${port}_log
-			#done
-			exit
+			ps -ef | grep "$netType -c"| grep -q $port
+			if [ $? -eq 0 ];then
+				continue
+			else
+				#for ((i=1;i<=$count;i++))
+				#do
+					#echo "${i}count" >> ${port}_log
+					echo "${port} test........"
+					for parallel in ${parallels[*]}
+					do
+						$netTool -c $serverPort -P $parallel -i $interrupt -t $time -p $port | tee ${port} 
+						needRows=`cat ${port} | tail -n 4 | head -n 2`
+						echo "now this port is ${port} and the parallel is ${parallel}------" >> ${port}_log
+						echo "${needRows}" >> ${port}_log
+						rm -f ${port}
+					done
+					#echo >> ${port}_log
+				#done
+				exit
+			fi		
 		fi	
 	done
 }
 #input:null
 #output:${port}_UDP_STREAM_log,${port}_UDP_RR_log
-function netperf(){
-	#netperf command:netperf -H ip -t UDP_STREAM -l time -p port -- -m size
-	msizes=(1 4 16 64 256 1024 4096 16384)
-	rsizes=(64 256 1024 4096 16384 32768)
+function install_netperf(){
+	wget http://htsat.vicp.cc:804/liubeijie/netperf-2.5.0.tar.gz;
+	tar -zxvf netperf-2.5.0.tar.gz;
+	cd netperf-netperf-2.5.0;
+	./configure -build=alpha;
+	make;make install
+}
+function netperf_UDP_STREAM(){
+	#netperf command:netperf -H ip -t UDP_STREAM -l time -p port -- -m msize
+	msizes=(1 4 16 64 256 1024 4096 16384 32768 65507)
 	for port in ${ports[*]}
 	do
-		ps -ef | grep netserver | grep -v "grep --color=auto netserver" | grep -q $port
+		ps -ef | grep "$netType" | grep -v "grep --color=auto" | grep -q $port
 		if [ $? -eq 0 ];then
 			continue
 		else
 		    echo "${port} test........"
-		    echo -e "msize\tThroughput(10^6bits/sec)" ${port}_UDP_STREAM_log
+		    echo -e "msize\tThroughput(10^6bits/sec)" >> ${port}_UDP_STREAM_log
 			for msize in ${msizes[*]}
 			do
-				/usr/bin/netperf -H $serverPort -t UDP_STREAM -l $time -p $port -- -m $msize | tee ${port}
+				$netTool -H $serverPort -t UDP_STREAM -l $time -p $port -- -m $msize | tee ${port}
 				#needRows=`cat ${port} | tail -n 3 | head -n 1 | awk '{print $6}'`
 				needRows=`cat ${port} | sed -n '6p' | awk '{print $6}'`				
 				echo -n -e "${msize}\t" >> ${port}_UDP_STREAM_log
@@ -89,13 +120,16 @@ function netperf(){
 				#echo >> ${port}_UDP_STREAM_log
 				rm -f ${port}
 			done
-			exit		
+			break		
 		fi
 	done
-
+}
+function netperf_UDP_RR(){
+	#netperf command:netperf -H ip -t UDP_RR -l time -p port -- -r rsize
+	rsizes=(64 256 1024 4096 16384 32768)
 	for port in ${ports[*]}
 	do
-		ps -ef | grep $netserver | grep -v "grep --color=auto netserver" | grep -q $port
+		ps -ef | grep "$netType" | grep -v "grep --color=auto" | grep -q $port
 		if [ $? -eq 0 ];then
 			continue
 		else
@@ -103,58 +137,62 @@ function netperf(){
 			echo "${port} test........"
 			for rsize in ${rsizes[*]}
 			do
-				/usr/bin/netperf -H serverPort -t UDP_RR -l $time -p $port -- -r $rsize | tee ${port}
+				$netTool -H $serverPort -t UDP_RR -l $time -p $port -- -r $rsize | tee ${port}
 				needRows=`cat ${port} | sed -n '7p' | awk '{print $6}'`				
 				echo -n -e "${rsize}\t" >> ${port}_UDP_RR_log
 				echo -n -e "${needRows}\n" >> ${port}_UDP_RR_log
 				#echo >> ${port}_UDP_RR_log
 				rm -f ${port}
 			done
-			exit		
+			break		
 		fi
 	done
 }
+
 #input:null
 #output:tcp_bw_lat,udp_bw_lat
-function qperf(){
-	#qperf command:qperf ip -oo msg_size:1:64K:*2 -vu tcp_bw tcp_lat 
-	#              qperf ip -oo msg_size:1:64K:*2 -vu udp_bw udp_lat 
-	/usr/bin/qperf $serverPort -oo msg_size:1:64K:*2 -vu tcp_bw tcp_lat | tee tcp
-	#echo -e "tcp_size\t\tbw\t\tlat" >> tcp_bw_lat
-	#msg_size=`cat tcp | grep msg_size | head -n 17 | awk '{print $3,$4}'`
-	#tcp_bw=`cat tcp | grep -v tcp_bw | grep bw | awk '{print $3,$4}'`
-	#latency=`cat tcp | grep latency | awk '{print $3,$4}'`
-	#echo -e "${msg_size}\n${tcp_bw}\n${latency}" >> tcp_bw_lat
-	echo msg_size: `cat tcp | grep msg_size | head -n 17 | awk '{print $3,$4}'` >> tcp_bw_lat
-	echo tcp_bw: `cat tcp | grep -v tcp_bw | grep bw | awk '{print $3,$4}'` >> tcp_bw_lat
-	echo latency: `cat tcp | grep latency | awk '{print $3,$4}'` >> tcp_bw_lat
-	rm -f tcp
 
-	/usr/bin/qperf $serverPort -oo msg_size:1:64K:*2 -vu udp_bw udp_lat | tee udp
-	#echo -e "udp_size\t\tbw\t\tlat" >> udp_bw_lat
-	#msg_size=`cat udp | grep msg_size | head -n 17 | awk '{print $3,$4}'`
-	#send_bw=`cat udp | grep send_bw | awk '{print $3,$4}'`
-	#recv_bw=`cat udp | grep recv_bw | awk '{print $3,$4}'`
-	#latency=`cat udp | grep latency | awk '{print $3,$4}'`
-	#echo -e "${msg_size}\n${send_bw}\n${recv_bw}\n${latency}" >> udp_bw_lat
-	echo msg_size: `cat udp | grep msg_size | head -n 17 | awk '{print $3,$4}'` >> udp_bw_lat
-	echo send_bw: `cat udp | grep send_bw | awk '{print $3,$4}'` >> udp_bw_lat
-	echo recv_bw: `cat udp | grep recv_bw | awk '{print $3,$4}'` >> udp_bw_lat
-	echo latency: `cat udp | grep latency | awk '{print $3,$4}'` >> udp_bw_lat
+function number(){
+    
+}
+function qperf(){
+	#qperf ip -oo msg_size:1:64K:*2 -vu tcp_bw tcp_lat 
+	$netTool $serverPort -oo msg_size:1:64K:*2 -vu tcp_bw tcp_lat | tee tcp
+
+	echo msg_size: `cat tcp | grep msg_size | head -n 17 | awk '{print $3,$4}'` 
+	echo tcp_bw: `cat tcp | grep -v tcp_bw | grep bw | awk '{print $3,$4}'` 
+	echo latency: `cat tcp | grep latency | awk '{print $3,$4}'`  
+	rm -f tcp
+	
+	#qperf ip -oo msg_size:1:64K:*2 -vu udp_bw udp_lat
+	$netTool $serverPort -oo msg_size:1:64K:*2 -vu udp_bw udp_lat | tee udp
+	echo msg_size: `cat udp | grep msg_size | head -n 17 | awk '{print $3,$4}'`
+	echo send_bw: `cat udp | grep send_bw | awk '{print $3,$4}'` 
+	echo recv_bw: `cat udp | grep recv_bw | awk '{print $3,$4}'` 
+	echo latency: `cat udp | grep latency | awk '{print $3,$4}'` 
 	rm -f udp
+	
 }
 
+#for in ((i=0;i<=$count;i++))
+#do
 case $netType in
 iperf)
     iperf
 ;;
 netperf)
-    netperf
+#	install_netperf
+    netperf_UDP_STREAM
+	netperf_UDP_RR
 ;;
 qperf)
     qperf
 ;;
-esac 
+esac
+#done
+
+
+
 
 
 

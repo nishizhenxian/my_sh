@@ -3,7 +3,7 @@
 #input:netType
 #output:null
 #
-#
+#sed -i 's/iperf/iperf3/g' server.sh
 netType=$1
 ports=(5001 5002)
 #preparation
@@ -20,7 +20,7 @@ else
 	if [ $? -eq 0 ];then
         echo "now system support $netType"
     else
-        yum install -y $netType || apt install -y $netType
+        yum install -y which $netType || apt install -y which $netType
     fi
 fi
 
