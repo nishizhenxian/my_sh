@@ -30,7 +30,7 @@ else
 	if [ $? -eq 0 ];then
         echo "now system support $netType"
     else
-        yum install -y which $netType || apt install -y which $netType
+        yum install -y which bc  $netType || apt install -y bc which $netType
     fi
 fi
 
@@ -124,6 +124,8 @@ function netperf_UDP_STREAM(){
 		fi
 	done
 }
+#input:null
+#output:tcp_bw_lat,udp_bw_lat
 function netperf_UDP_RR(){
 	#netperf command:netperf -H ip -t UDP_RR -l time -p port -- -r rsize
 	rsizes=(64 256 1024 4096 16384 32768)
@@ -149,29 +151,53 @@ function netperf_UDP_RR(){
 	done
 }
 
-#input:null
-#output:tcp_bw_lat,udp_bw_lat
 
-function number(){
-    
+function num_unit(){
+	nums=($1)
+	units=($2)
+	let totalNums=${#nums[*]}-1
+	for ((i=0; i<=${totalNums}; i++))
+	do
+		case ${units[$i]} in
+			KB/sec)
+				awk 'BEGIN{printf "%.2f\n",('${nums[$i]}'/1024)}'
+			;;
+			MB/sec)
+				echo ${nums[$i]}
+			;;
+			GB/sec)
+				echo "${nums[$i]}*1024" | bc
+			;;
+			bytes/sec)
+				echo ${nums[$i]}
+			;;
+		esac
+	done
 }
+
 function qperf(){
 	#qperf ip -oo msg_size:1:64K:*2 -vu tcp_bw tcp_lat 
 	$netTool $serverPort -oo msg_size:1:64K:*2 -vu tcp_bw tcp_lat | tee tcp
-
-	echo msg_size: `cat tcp | grep msg_size | head -n 17 | awk '{print $3,$4}'` 
-	echo tcp_bw: `cat tcp | grep -v tcp_bw | grep bw | awk '{print $3,$4}'` 
-	echo latency: `cat tcp | grep latency | awk '{print $3,$4}'`  
-	rm -f tcp
-	
+	tcp_bw_num=`cat tcp | grep -v tcp_bw | grep bw | awk '{print $3}'`
+	tcp_bw_unit=`cat tcp | grep -v tcp_bw | grep bw | awk '{print $4}'`
+	echo "******tcp_bw*********"
+	num_unit "${tcp_bw_num[*]}" "${tcp_bw_unit[*]}"		
+	echo "******latency*********"
+	echo "`cat tcp | grep latency | awk '{print $3}'`"
+		
 	#qperf ip -oo msg_size:1:64K:*2 -vu udp_bw udp_lat
 	$netTool $serverPort -oo msg_size:1:64K:*2 -vu udp_bw udp_lat | tee udp
-	echo msg_size: `cat udp | grep msg_size | head -n 17 | awk '{print $3,$4}'`
-	echo send_bw: `cat udp | grep send_bw | awk '{print $3,$4}'` 
-	echo recv_bw: `cat udp | grep recv_bw | awk '{print $3,$4}'` 
-	echo latency: `cat udp | grep latency | awk '{print $3,$4}'` 
-	rm -f udp
-	
+	send_bw_num=`cat udp | grep send_bw | awk '{print $3}'` 
+	send_bw_unit=`cat udp | grep send_bw | awk '{print $4}'` 
+	recv_bw_num=`cat udp | grep recv_bw | awk '{print $3}'` 
+	recv_bw_unit=`cat udp | grep recv_bw | awk '{print $4}'`	
+	echo "******udp_send_bw*********"
+	num_unit "${send_bw_num[*]}" "${send_bw_unit[*]}"	
+	echo "******udp_recv_bw*********"
+	num_unit "${recv_bw_num[*]}" "${recv_bw_unit[*]}"	
+	echo "******latency*********"
+	echo "`cat udp | grep latency | awk '{print $3}'`" 	
+	rm -f tcp udp
 }
 
 #for in ((i=0;i<=$count;i++))
