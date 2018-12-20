@@ -109,18 +109,16 @@ function netperf_UDP_STREAM(){
 			continue
 		else
 		    echo "${port} test........"
-		    echo -e "msize\tThroughput(10^6bits/sec)" >> ${port}_UDP_STREAM_log
+		    echo -e "msize(bytes)\tThroughput(10^6bits/sec)" >> ${port}_UDP_STREAM_log
 			for msize in ${msizes[*]}
 			do
 				$netTool -H $serverPort -t UDP_STREAM -l $time -p $port -- -m $msize | tee ${port}
-				#needRows=`cat ${port} | tail -n 3 | head -n 1 | awk '{print $6}'`
 				needRows=`cat ${port} | sed -n '6p' | awk '{print $6}'`				
 				echo -n -e "${msize}\t" >> ${port}_UDP_STREAM_log
 				echo -n -e "${needRows}\n" >> ${port}_UDP_STREAM_log
-				#echo >> ${port}_UDP_STREAM_log
 				rm -f ${port}
 			done
-			break		
+			exit		
 		fi
 	done
 }
@@ -135,18 +133,17 @@ function netperf_UDP_RR(){
 		if [ $? -eq 0 ];then
 			continue
 		else
-		    echo -e "rsize\tRate(per sec)" >> ${port}_UDP_RR_log
 			echo "${port} test........"
+		    echo -e "rsize(bytes)\tRate(per sec)" >> ${port}_UDP_RR_log
 			for rsize in ${rsizes[*]}
 			do
 				$netTool -H $serverPort -t UDP_RR -l $time -p $port -- -r $rsize | tee ${port}
 				needRows=`cat ${port} | sed -n '7p' | awk '{print $6}'`				
 				echo -n -e "${rsize}\t" >> ${port}_UDP_RR_log
 				echo -n -e "${needRows}\n" >> ${port}_UDP_RR_log
-				#echo >> ${port}_UDP_RR_log
 				rm -f ${port}
 			done
-			break		
+			exit		
 		fi
 	done
 }

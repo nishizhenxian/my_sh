@@ -34,8 +34,7 @@ iperf)
 		if [ $? -eq 0  ];then
 			continue
 		else
-			iperf -s -p $i
-			break          
+			iperf -s -p $i        
 		fi
 	done
 ;;
